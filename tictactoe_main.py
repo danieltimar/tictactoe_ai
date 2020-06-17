@@ -6,7 +6,6 @@ from math import inf
 
 #BOARD_SIZE = 3
 
-
 class Board:
     def __init__(self, player1, player2, board_size=3):
         self.board_size = board_size
@@ -24,7 +23,6 @@ class Board:
         else:
             self.mark_to_win = 5
 
-    # get unique hash of current board state
     def encode_to_key(self):
         self.board_as_key = str(self.board.reshape(self.board_size * self.board_size))
         return self.board_as_key
@@ -82,7 +80,7 @@ class Board:
                         sequence_counter = 0
                         break
 
-        # Check if draw (board is full)
+        # draw
         draw_flag = None
         for i in range(self.board_size):
             for j in range(self.board_size):
@@ -94,43 +92,6 @@ class Board:
 
         self.gameover = False
         return None
-
-    # def winner(self):
-    #     # row
-    #     for i in range(self.board_size):
-    #         if sum(self.board[i, :]) == 3:
-    #             self.gameover = True
-    #             return 1
-    #         if sum(self.board[i, :]) == -3:
-    #             self.gameover = True
-    #             return -1
-    #     # col
-    #     for i in range(self.board_size):
-    #         if sum(self.board[:, i]) == 3:
-    #             self.gameover = True
-    #             return 1
-    #         if sum(self.board[:, i]) == -3:
-    #             self.gameover = True
-    #             return -1
-    #     # diagonal
-    #     diag_sum1 = sum([self.board[i, i] for i in range(self.board_size)])
-    #     diag_sum2 = sum([self.board[i, self.board_size - i - 1] for i in range(self.board_size)])
-    #     diag_sum = max(abs(diag_sum1), abs(diag_sum2))
-    #     if diag_sum == 3:
-    #         self.gameover = True
-    #         if diag_sum1 == 3 or diag_sum2 == 3:
-    #             return 1
-    #         else:
-    #             return -1
-    #
-    #     # tie
-    #     # no available positions
-    #     if len(self.potential_moves()) == 0:
-    #         self.gameover = True
-    #         return 0
-    #     # not end
-    #     self.gameover = False
-    #     return None
 
     def potential_moves(self):
         positions = []
@@ -146,10 +107,8 @@ class Board:
         else:
             position = self.player2.pick_next_move()
             self.board[position] = self.player_mark
-        # switch to another player
         self.player_mark = -1 if self.player_mark == 1 else 1
 
-    # only when game ends
     def giveReward(self):
         result = self.winner()
 
@@ -163,7 +122,6 @@ class Board:
             self.player1.backpropagate_reward(0.1)
             self.player2.backpropagate_reward(0.5)
 
-    # board reset_game
     def reset_board(self):
         self.board = np.zeros((self.board_size, self.board_size))
         self.board_as_key = None
@@ -175,19 +133,15 @@ class Board:
             if i % 1000 == 0:
                 print("Rounds {}".format(i))
             while not self.gameover:
-                # Player 1
                 positions = self.potential_moves()
                 player1_action = self.player1.pick_next_move(positions, self.board, self.player_mark)
-                # take action and upDate board state
                 self.make_move(player1_action)
                 board_hash = self.encode_to_key()
                 self.player1.append_board_state(board_hash)
-                # check board status if it is end
 
                 win = self.winner()
                 if win is not None:
                     # self.print_board()
-                    # ended with player1 either win or draw
                     self.giveReward()
                     self.player1.reset_player()
                     self.player2.reset_player()
@@ -195,7 +149,6 @@ class Board:
                     break
 
                 else:
-                    # Player 2
                     positions = self.potential_moves()
                     player2_action = self.player2.pick_next_move(positions, self.board, self.player_mark)
                     self.make_move(player2_action)
@@ -215,16 +168,14 @@ class Board:
         self.player1.save_state_values()
         self.player2.save_state_values()
 
-    # play with human
+    # play with human player
     def play2(self):
         while not self.gameover:
             # Player 1
             positions = self.potential_moves()
             player1_action = self.player1.pick_next_move(positions, self.board, self.player_mark)
-            # take action and update board state
             self.make_move(player1_action)
             self.print_board()
-            # check board status if it is end
             win = self.winner()
             if win is not None:
                 if win == 1:
@@ -268,10 +219,10 @@ class Board:
 
 
 class Player:
-    def __init__(self, name, exp_rate=0.3, board_size=3):
+    def __init__(self, name, exp_rate=0.3, lr_rate=0.2, board_size=3):
         self.name = name
         self.states = []
-        self.lr = 0.2
+        self.lr = lr_rate
         self.exp_rate_initial = exp_rate
         self.exp_rate = exp_rate
         self.decay_gamma = 0.9
@@ -288,7 +239,6 @@ class Player:
 
     def pick_next_move(self, positions, current_board, symbol):
         if (np.random.uniform(0, 1) <= self.exp_rate) or (len(positions) == self.board_size**2):
-            # take random action
             idx = np.random.choice(len(positions))
             action = positions[idx]
             # self.exp_rate = self.exp_rate * 0.999
@@ -404,11 +354,24 @@ if __name__ == "__main__":
     while board_size not in (3, 5, 7, 10):
         board_size = int(input('Select board size (3, 5, 7 or 10):'))
 
-    # training
-    if play_mode in (0, 2):
+    exploration_rate = None
+    while (exploration_rate is None) or (not 0 <= exploration_rate <= 1):
+        exploration_rate = float(input('Select rate of exploration (between 0 and 1): '))
+
+    learning_rate = None
+    while (learning_rate is None) or (not 0 <= learning_rate <= 1):
+        learning_rate = float(input('Select learning rate (between 0 and 1): '))
+
+    iterations = None
+    while (iterations is None) or (not 0 <= iterations <= 100000):
         iterations = int(input('Type number of iterations: '))
-        player1 = Player("player1", board_size=board_size)
-        player2 = Player("player2", board_size=board_size)
+
+
+    # training with AI
+    if play_mode in (0, 2):
+        iterations = iterations
+        player1 = Player("player1", board_size=board_size, exp_rate=exploration_rate, lr_rate=learning_rate)
+        player2 = Player("player2", board_size=board_size, exp_rate=0)
 
         st = Board(player1, player2, board_size=board_size)
         print("training...")
