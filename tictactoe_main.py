@@ -1,4 +1,6 @@
 import numpy as np
+from pandas import Series, DataFrame
+import matplotlib.pyplot as plt
 import pickle
 import re
 import os
@@ -114,13 +116,13 @@ class Board:
 
         if result == 1:
             self.player1.backpropagate_reward(1)
-            self.player2.backpropagate_reward(0)
+            self.player2.backpropagate_reward(-1)
         elif result == -1:
-            self.player1.backpropagate_reward(0)
+            self.player1.backpropagate_reward(-1)
             self.player2.backpropagate_reward(1)
         else:
-            self.player1.backpropagate_reward(0.1)
-            self.player2.backpropagate_reward(0.5)
+            self.player1.backpropagate_reward(-0.5)
+            self.player2.backpropagate_reward(-0.5)
 
     def reset_board(self):
         self.board = np.zeros((self.board_size, self.board_size))
@@ -128,9 +130,10 @@ class Board:
         self.gameover = False
         self.player_mark = 1
 
-    def play(self, rounds=100):
+    def play(self, rounds=100, print_stats=False):
+        winning_history = []
         for i in range(rounds):
-            if i % 1000 == 0:
+            if i % 100 == 0:
                 print("Rounds {}".format(i))
             while not self.gameover:
                 positions = self.potential_moves()
@@ -142,6 +145,7 @@ class Board:
                 win = self.winner()
                 if win is not None:
                     # self.print_board()
+                    winning_history.append(win)
                     self.giveReward()
                     self.player1.reset_player()
                     self.player2.reset_player()
@@ -157,7 +161,7 @@ class Board:
 
                     win = self.winner()
                     if win is not None:
-                        # self.print_board()
+                        winning_history.append(win)
                         # ended with player2 either win or draw
                         self.giveReward()
                         self.player1.reset_player()
@@ -167,6 +171,17 @@ class Board:
 
         self.player1.save_state_values()
         self.player2.save_state_values()
+
+        if print_stats:
+            winning_series = Series(winning_history)
+            print(winning_series.value_counts(normalize=True, ascending=False))
+            winning_df = DataFrame({'wins': winning_series, 'values': np.ones(len(winning_series))})
+            df_to_plot = winning_df.pivot(columns='wins', values='values').fillna(0).cumsum()
+            for c in df_to_plot.columns.values:
+                plt.plot(df_to_plot[c], label=f'Winner:{c}')
+            plt.legend()
+            plt.show()
+
 
     # play with human player
     def play2(self):
@@ -225,7 +240,7 @@ class Player:
         self.lr = lr_rate
         self.exp_rate_initial = exp_rate
         self.exp_rate = exp_rate
-        self.decay_gamma = 0.9
+        self.decay_gamma = 1
         self.states_value = {}
         self.board_size = board_size
 
@@ -264,7 +279,7 @@ class Player:
 
     def find_equivalent_state(self, state):
         rotate0 = state
-        rotate90 = np.rot90(state)
+        rotate90 = np.rot90(state, k=1)
         rotate180 = np.rot90(state, k=2)
         rotate270 = np.rot90(state, k=3)
         flip0 = np.flipud(state)
@@ -284,15 +299,21 @@ class Player:
             return None
 
     def backpropagate_reward(self, reward):
-        for state in reversed(self.states):
+        for i, state in enumerate(reversed(self.states)):
             state_decoded = self.decode_from_key(state)
             state_equivalent = self.find_equivalent_state(state_decoded)
             if state_equivalent is None:
-                self.states_value[state] = self.lr * (self.decay_gamma * reward)
-                reward = self.states_value[state]
+                if i == 0:
+                    self.states_value[state] = reward
+                else:
+                    self.states_value[state] = self.lr * (self.decay_gamma * reward) # initial value 0 = 0
+                    reward = self.states_value[state]
             else:
-                self.states_value[state_equivalent] += self.lr * (self.decay_gamma * reward - self.states_value[state_equivalent])
-                reward = self.states_value[state_equivalent]
+                if i == 0:
+                    continue
+                else:
+                    self.states_value[state_equivalent] += self.lr * (self.decay_gamma * reward - self.states_value[state_equivalent])
+                    reward = self.states_value[state_equivalent]
 
     def reset_player(self):
         self.states = []
@@ -356,26 +377,35 @@ if __name__ == "__main__":
 
     exploration_rate = None
     while (exploration_rate is None) or (not 0 <= exploration_rate <= 1):
-        exploration_rate = float(input('Select rate of exploration (between 0 and 1): '))
+        if play_mode in (0, 2):
+            exploration_rate = float(input('Select rate of exploration (between 0 and 1): '))
+        else:
+            break
 
     learning_rate = None
     while (learning_rate is None) or (not 0 <= learning_rate <= 1):
-        learning_rate = float(input('Select learning rate (between 0 and 1): '))
+        if play_mode in (0, 2):
+            learning_rate = float(input('Select learning rate (between 0 and 1): '))
+        else:
+            break
 
     iterations = None
     while (iterations is None) or (not 0 <= iterations <= 100000):
-        iterations = int(input('Type number of iterations: '))
+        if play_mode in (0, 2):
+            iterations = int(input('Type number of iterations: '))
+        else:
+            break
 
 
     # training with AI
     if play_mode in (0, 2):
         iterations = iterations
         player1 = Player("player1", board_size=board_size, exp_rate=exploration_rate, lr_rate=learning_rate)
-        player2 = Player("player2", board_size=board_size, exp_rate=0)
+        player2 = Player("player2", board_size=board_size, exp_rate=exploration_rate, lr_rate=learning_rate)
 
         st = Board(player1, player2, board_size=board_size)
         print("training...")
-        st.play(iterations)
+        st.play(iterations, print_stats=True)
 
     # play with human
     if play_mode in (1, 2):
