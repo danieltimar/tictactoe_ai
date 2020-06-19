@@ -130,7 +130,7 @@ class Board:
         self.gameover = False
         self.player_mark = 1
 
-    def play(self, rounds=100, print_stats=False):
+    def play_ai(self, rounds=100, print_stats=False):
         winning_history = []
         for i in range(rounds):
             if i % 100 == 0:
@@ -184,7 +184,7 @@ class Board:
 
 
     # play with human player
-    def play2(self):
+    def play_human(self):
         while not self.gameover:
             # Player 1
             positions = self.potential_moves()
@@ -405,7 +405,7 @@ if __name__ == "__main__":
 
         st = Board(player1, player2, board_size=board_size)
         print("training...")
-        st.play(iterations, print_stats=True)
+        st.play_ai(iterations, print_stats=True)
 
     # play with human
     if play_mode in (1, 2):
@@ -417,6 +417,6 @@ if __name__ == "__main__":
             player2 = HumanPlayer("human")
 
             st = Board(player1, player2, board_size=board_size)
-            st.play2()
+            st.play_human()
             play_again = input('Want to play again? (y/n)')
 
